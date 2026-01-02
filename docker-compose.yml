@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.7.1
+    container_name: mlflow_server
+    ports:
+      - "5000:5000"
+    command: mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./mlruns --host 0.0.0.0
+    volumes:
+      - ./mlflow_data:/mlflow
+
+  pipeline:
+    build: .
+    container_name: pipeline_runner
+    depends_on:
+      - mlflow
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    volumes:
+      - ./artifacts:/app/artifacts
+      - ./data:/app/data
+      - ./mlruns:/app/mlruns # Bind mount to share local run data if needed
+    command: bash -c "python src/preprocess.py && python src/feature_engineering.py && python src/train.py && python src/evaluate.py"
+
+  serving:
+    build: .
+    container_name: prediction_service
+    depends_on:
+      - pipeline
+    ports:
+      - "8000:8000"
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    volumes:
+      - ./model_hybrid.pkl:/app/model_hybrid.pkl
+      - ./safety_layer.pkl:/app/safety_layer.pkl
+      - ./features_list.pkl:/app/features_list.pkl
+    command: uvicorn src.serve:app --host 0.0.0.0 --port 8000
+
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus

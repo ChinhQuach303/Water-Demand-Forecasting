@@ -1,0 +1,14 @@
+numpy
+pandas
+scikit-learn>=1.3
+xgboost
+lightgbm
+catboost
+optuna
+joblib
+fastapi
+uvicorn
+pyyaml
+mlflow
+prometheus-client
+pyarrow
